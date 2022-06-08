@@ -168,8 +168,6 @@ def ask_mod(x,e_vec,nsym,tbit,wincut,fc,bias,Ebit=0.0,N0=None,fs=800e6):
     return sig,sym_seq,bit_seq
 
 
-#this_x,this_evec,num_bits,ns_per_bit,  2,     const_wincut,fc_sig,Ebit=0.0,N0=None,fs=fs
-#x      ,e_vec,   nsym,    tbit,       nbit,     wincutfc,         Ebit=0.0,N0=None,fs=800e6
 
 def ask_fast(x,e_vec,nsym,tbit,nbit,wincut,fc,Ebit=0.0,N0=None,fs=800e6):
 
@@ -330,8 +328,9 @@ def qpsk(x,nbits,symbol_rate,wincut,fc,Ebit,fs=800e6):
 
 
 def duty_cycle(y,percent,period,fs=800e6):
+    #y: 1D input signal
     #period in ms, given sampling rate fs (in Hz)
-    #percent in fraction 0-1
+    #percent as a fraction in range 0-1
     period_nsamp = period * 1e-3 * fs
     print('number of samples per duty cycle: {}'.format(period_nsamp))
     one_dc = np.ones(int(period_nsamp))
@@ -348,8 +347,11 @@ def duty_cycle(y,percent,period,fs=800e6):
 
 
 def SK_master(s,m):
+    #do single-scale SK
+    #s: 2D array of input data (chan,spectra)
+    #m: SK M value
     numSKspectra = s.shape[1]//m
-    #print(numSKspectra)
+
     for i in range(numSKspectra):
         this_s = s[:,i*m:(i+1)*m]
         if (i==0):
@@ -362,24 +364,21 @@ def SK_master(s,m):
     return out_sk,out_s
 
 def ms_SK_EST(s1,s2,m,n=1,d=1):
+    #do multi-scale SK using ms-s1,ms-s2
     sk_est = ((m*n*d+1)/(m-1))*(((m*s2)/(s1**2))-1)
 
     return sk_est
 
 def ms_SK_master(s,m,ms0,ms1,lt,ut):
-    #print('---- MS SK ----')
-    #print(s.shape)
+    #bin up s for multi-scale SK
+    #and call ms_SK_EST
     numSKspectra = s.shape[1]//m
-    #print(numSKspectra)
+
     Nchan= s.shape[0]
-    
-    
-    
     n=1
     d=1
     
     ms_binsize = ms0*ms1
-    
     ms_s1 = np.zeros((s.shape[0]-(ms0-1),numSKspectra-(ms1-1)))
     ms_s2 = np.zeros((s.shape[0]-(ms0-1),numSKspectra-(ms1-1)))
     
@@ -394,39 +393,22 @@ def ms_SK_master(s,m,ms0,ms1,lt,ut):
             s1 = np.c_[s1,np.sum(this_s,axis=1)]
             s2 = np.c_[s2,np.sum(this_s**2,axis=1)]
                   
-    #print(s1.shape)
     #fill multiscale s1, s2
     for ichan in range(ms0):
         for itime in range(ms1):
             
             ms_s1 += (1./ms_binsize) * (s1[ichan:ichan+(Nchan-(ms0-1)),itime:itime+(numSKspectra-(ms1-1))])
             ms_s2 += (1./ms_binsize) * (s2[ichan:ichan+(Nchan-(ms0-1)),itime:itime+(numSKspectra-(ms1-1))])
-            
-            
-            #ms_s1 += (s1[ichan:ichan+(Nchan-(ms0-1)),itime:itime+(numSKspectra-(ms1-1))])
-            #ms_s2 += (s2[ichan:ichan+(Nchan-(ms0-1)),itime:itime+(numSKspectra-(ms1-1))])
-    #print(ms_s1.shape)
-            
-    #plt.imshow(np.log10(ms_s1),interpolation='nearest',aspect='auto',cmap='hot',vmin=2.5,vmax=3)
-    #plt.colorbar()
-    #plt.show()
-
 
     #Multiscale SK
     for k in range(numSKspectra-(ms1-1)):
 
-
-        #sk_spect = ms_SK_EST(ms_s1[:,k],ms_s2[:,k],numSKspectra-(ms1-1),n,d)
         sk_spect = ms_SK_EST(ms_s1[:,k],ms_s2[:,k],m,n,d)
-        #sk_spect[:,1] = ms_SK_EST(ms_s1[:,k],ms_s2[:,k],numSKspectra-(ms1-1),n,d)
 
-        
         ms_flag_spect = np.zeros((Nchan-(ms0-1)),dtype=np.int8)
         
-
         ms_flag_spect[sk_spect>ut] = 1
         ms_flag_spect[sk_spect<lt] = 1
-
 
 
         #append to results
@@ -442,34 +424,6 @@ def ms_SK_master(s,m,ms0,ms1,lt,ut):
               
     return ms_sk_block,ms_flags_block,ms_s1
 
-
-
-#define where rfi is based on -10dB below noise
-def power_mask_fft(x,n,Nchan,M,Nsk):
-	#print('making power mask')
-	out_f = np.zeros((Nsk,Nchan),dtype=np.int8)
-	xfb = np.reshape(x,(Nsk,M,Nchan))
-	nfb = np.reshape(n,(Nsk,M,Nchan))
-
-	hann = np.hanning(Nchan)
-	xfb *= hann
-	nfb *= hann
-
-	xs = np.abs(np.fft.fft(xfb,axis=2))**2
-	ns = np.abs(np.fft.fft(nfb,axis=2))**2
-	xfb = None
-	nfb = None
-
-	x_ave = np.mean(xs,axis=1)
-	n_ave = np.mean(ns,axis=1)
-	xs = None
-	ns = None
-
-	n_pow = np.mean(n_ave)
-	s_db = 10*np.log10((x_ave)/n_pow)
-	n_db = 10*np.log10((n_ave)/n_pow)
-	out_f[s_db > -10] = 1
-	return out_f.T,s_db
 
 #define where rfi is based on -10dB below noise
 

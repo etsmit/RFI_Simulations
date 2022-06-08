@@ -5,8 +5,8 @@
 #use $psrenv python
 
 #first section of code is just the simulation function
-#change sim parameters starting at line 300
-#multicore processing starts at line 400
+#change sim parameters starting at line 420
+#multicore processing starts at line 530
 
 #flagging code can be replaced in lines 235 - 255
 
@@ -42,7 +42,7 @@ def put_q(q,a):
 #do each_core number of individual simulations
 def do_sims():
 	#s: random seed given by parent process
-	#I know, ew global variables, but these will not change while code runs
+	#I know, global variables, but these will not change while code runs
 	global s0_par
 	global s1_par
 	global slice_0
@@ -71,6 +71,7 @@ def do_sims():
 	global const_wincut
 	global const_SKsig
 	global const_amp
+	global const_adc_amp
 
 	this_core_start_time = time.time()
 
@@ -182,7 +183,7 @@ def do_sims():
 					amp = const_amp
 				#==============#
 
-
+				adc_amp = const_adc_amp
 
 				#power levels
 				noise_db = 0.0
@@ -204,11 +205,11 @@ def do_sims():
 				#optimization: load/create x index array/carrier signal for re-use
 				if (kk==0) and (ii==0) and (jj==0):
 					print('creating first large array...')
-					x = np.arange(num_spectra*Nchan,dtype=np.uint32)
+					#x = np.arange(num_spectra*Nchan,dtype=np.uint32)
 					#x = np.tile(np.arange(ns_per_bit),num_bits)
-					e_vec = np.exp(2.j*np.pi*fc_sig*x*ts)
-					#x = np.load('/home/scratch/esmith/big_x60.npy')
-					#e_vec = np.load('/home/scratch/esmith/big_evec60.npy')
+					#e_vec = np.exp(2.j*np.pi*fc_sig*x*ts)
+					x = np.load('/home/scratch/esmith/big_x60.npy')
+					e_vec = np.load('/home/scratch/esmith/big_evec60.npy')
 					#fir_sz = int(0.2*ns_per_bit)
 					#sinc = scipy.signal.firwin(fir_sz, cutoff=1.0/fir_sz, window="rectangular")
 					#np.save('big_x60.npy',x)
@@ -282,7 +283,7 @@ def do_sims():
 					ydc = ydc[:(Nchan*num_spectra)]
 					#print(len(y))
 					#make complex noise, mean 0 std 1
-					n = np.random.RandomState().normal(0,1,size=len(ydc)) + 1.j*np.random.RandomState().normal(0,1,size=len(ydc))
+					n = np.random.RandomState().normal(0,adc_amp,size=len(ydc)).astype(np.int8) + 1.j*np.random.RandomState().normal(0,adc_amp,size=len(ydc)).astype(np.int8)
 
 					#ramp up signal strength from 0 to 1
 					ramp = np.arange(len(ydc))/(len(ydc))
@@ -291,6 +292,8 @@ def do_sims():
 					ydc *= ramp
 					#ydc *= amp
 					ramp = None
+					ydc.real = (adc_amp*ydc.real).astype(np.int8)
+					ydc.imag = (adc_amp*ydc.imag).astype(np.int8)
 
 					#channelize/square the data
 					#make -10dB mask (channelizes y,n separately)
@@ -417,7 +420,6 @@ def do_sims():
 
 
 
-
 #==================================================
 #inits
 
@@ -465,6 +467,7 @@ ts=1/fs
 const_ms0 = 4
 const_ms1 = 2
 const_amp = 1
+const_adc_amp=16
 
 const_dc = 1
 const_dcper = 1
@@ -485,7 +488,7 @@ const_SKsig = 3.0
 s0_par = 'ksps'
 
 #slice 1 parameter
-s1_par = 'dc'
+s1_par = 'SKm'
 
 #0:
 slice_0 = np.array([1,4,20,100,200])# data rate ksps
@@ -496,10 +499,10 @@ slice_0 = np.array([1,4,20,100,200])# data rate ksps
 
 #1:
 #slice_1 = np.around(np.arange(0.02,1.01,0.02),2)# duty cycles (2%)
-slice_1 = np.around(np.arange(0.05,1.01,0.05),2)# duty cycles (5%)
+#slice_1 = np.around(np.arange(0.05,1.01,0.05),2)# duty cycles (5%)
 #slice_1 = np.around(np.arange(0.05,1.01,0.05),2)# amplitudes (5%)
 #slice_1 = np.array([128,256,512,1024,2048,4096])# SKm
-#slice_1 = np.array([128,256,512,1024,2048])# SKm
+slice_1 = np.array([128,256,512,1024,2048])# SKm
 #slice_1 = np.array(['11','12','21','22','24','42','44'])# mssk shape
 #slice_1 = np.arange(0.2,6.1,0.4)# sk sigma threshold
 
@@ -523,10 +526,6 @@ sig_type = 'bpsk'
 
 #number of multiprocessing cores to use (warning: no mem shared between them)
 num_cores = 10
-
-
-
-
 
 
 
